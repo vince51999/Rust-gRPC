@@ -1,6 +1,6 @@
 use std::{
-  sync::{Arc, Mutex},
-  net::SocketAddr,
+    sync::{Arc, Mutex},
+    net::SocketAddr,
 };
 use tonic::{transport::Server, Request, Response, Status};
 use rand::Rng;
@@ -8,7 +8,7 @@ use rand::Rng;
 // Import the generated product module
 use product::{Empty, ProductSnResponse, ProductPriceResponse, product_server::{Product, ProductServer}};
 pub mod product {
-  tonic::include_proto!("product");
+    tonic::include_proto!("product");
 }
 
 // Define the product data structure
@@ -25,51 +25,51 @@ pub struct ProductImpl {
 }
 
 impl ProductImpl {
-  // Constructor to create a new instance with default values
-  pub fn new() -> Self {
-      Self {
-          data: Arc::new(Mutex::new(ProductData::default())),
-      }
-  }
+    // Constructor to create a new instance with default values
+    pub fn new() -> Self {
+        Self {
+            data: Arc::new(Mutex::new(ProductData::default())),
+        }
+    }
 
-  // Method to set the price to a new value
-  pub fn set_price(&mut self, price: i32) {
-      let mut data = self.data.lock().unwrap();
-      data.price = price;
-  }
+    // Method to set the price to a new value
+    pub fn set_price(&mut self, price: i32) {
+        let mut data = self.data.lock().unwrap();
+        data.price = price;
+    }
 
-  // Method to set the serial number to a new value
-  pub fn set_sn(&mut self, sn: i32) {
-      let mut data = self.data.lock().unwrap();
-      data.sn = sn;
-  }
+    // Method to set the serial number to a new value
+    pub fn set_sn(&mut self, sn: i32) {
+        let mut data = self.data.lock().unwrap();
+        data.sn = sn;
+    }
 
-  // Spawn a background task to update the product data
-  pub fn start_updating(&self) {
-      let data = Arc::clone(&self.data);
-      tokio::spawn(async move {
-        loop {
-          let price;
-          let sn;
-          
-          {
-              let mut product_data = data.lock().unwrap();
-              // Generate a random integer price between 10 and 200
-              price = rand::thread_rng().gen_range(10..=200);
-              // Generate a random integer serial number between 0 and 300
-              sn = rand::thread_rng().gen_range(0..=300);
-              
-              // Update the product data
-              product_data.price = price;
-              product_data.sn = sn;
-              println!("{}, {}", sn, price);
-          }
-          
-          // Sleep for some time before the next update
-          tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-      }
-    });
-  }
+    // Spawn a background task to update the product data
+    pub fn start_updating(&self) {
+        let data = Arc::clone(&self.data);
+        tokio::spawn(async move {
+            loop {
+                let price;
+                let sn;
+                
+                {
+                    let mut product_data = data.lock().unwrap();
+                    // Generate a random integer price between 10 and 200
+                    price = rand::thread_rng().gen_range(10..=200);
+                    // Generate a random integer serial number between 0 and 300
+                    sn = rand::thread_rng().gen_range(0..=300);
+                    
+                    // Update the product data
+                    product_data.price = price;
+                    product_data.sn = sn;
+                    println!("{}, {}", sn, price);
+                }
+                
+                // Sleep for some time before the next update
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        });
+    }
 }
 
 #[tonic::async_trait]
