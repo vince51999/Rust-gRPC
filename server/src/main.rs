@@ -19,7 +19,7 @@ struct ProductData {
 }
 
 // Define a struct to hold the product data
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ProductImpl {
     data: Arc<Mutex<ProductData>>,
 }
@@ -99,37 +99,49 @@ impl Product for ProductImpl {
     }
 }
 
+// Define the global product_impl variable
+static mut PRODUCT_IMPL: Option<ProductImpl> = None;
+
 // Import the generated offer module
-use offer::{OfferRequest, OfferResponse, offer_server::{Offer, ProductServer}};
+use offer::{OfferRequest, OfferResponse, offer_server::{Offer, OfferServer}};
+
 pub mod offer {
-tonic::include_proto!("offer");
+    tonic::include_proto!("offer");
 }
-  
-// Define a struct to hold the product data
-#[derive(Default)]
-pub struct OfferImpl {
-    data: ProductImpl,
+
+pub struct OfferImpl {}
+
+impl OfferImpl {
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[tonic::async_trait]
 impl Offer for OfferImpl {
-    // take with reference product_impl
-
-    pub fn set_product(&mut self, data: &ProductImpl) {
-        self.product = data;
-        
-    }
-
-
-    async fn ConfirmOffer(
+    async fn confirm_offer(
         &self,
         request: Request<OfferRequest>,
     ) -> Result<Response<OfferResponse>, Status> {
-        // Return the price from the product data
-        let price = request.into_inner().price;
-        let sn = request.into_inner().sn;
-        let response = OfferResponse { offer: price + sn };
+        // Get the product_impl instance from the global variable
+        let product_impl = unsafe {
+            PRODUCT_IMPL.as_ref().unwrap()
+        };
 
+        // Get the price and serial number from the product_impl instance
+        let data = Arc::clone(&product_impl.data);
+        let product_data = data.lock().unwrap();
+        let price = product_data.price;
+        //let sn = product_data.sn;
+        let mut confirm = false;
+
+        // Check if the price is less than the offer price
+        if price <= request.get_ref().price {
+            confirm = true;
+        }
+
+        // Return the serial number if the price is greater than or equal to the offer price
+        let response = OfferResponse { confirmed : confirm };
         Ok(Response::new(response))
     }
 }
@@ -141,21 +153,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an instance of ProductImpl
     let product_impl = ProductImpl::new(); // Changed to not mutable
 
-// Create an instance of ProductImpl
-let offer_impl = OfferImpl::new();
-offer_impl.set_product(&product_impl);
-
     // Start updating the product data in a separate thread
     product_impl.start_updating();
 
+    // Set the global mutable variable
+    unsafe {
+        PRODUCT_IMPL = Some(product_impl.clone()); // Cloning product_impl
+    }
 
     println!("Rust gRPC server listening on {}", addr);
 
-  // Serve the GPRC server
-  Server::builder()
-      .add_service(ProductServer::new(product_impl))
-      .serve(addr)
-      .await?;
+    // Serve the gRPC server
+    Server::builder()
+        .add_service(ProductServer::new(product_impl)) // Pass a reference
+        .add_service(OfferServer::new(OfferImpl::new()))
+        .serve(addr)
+        .await?;
 
     Ok(())
 }
