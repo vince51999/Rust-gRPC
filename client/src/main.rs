@@ -1,5 +1,5 @@
 use tonic::transport::Channel;
-use product::{product_client::ProductClient, Empty, ProductPriceResponse, ProductSnResponse};
+use product::{product_client::ProductClient, Empty};
 
 pub mod product {
     tonic::include_proto!("product");
