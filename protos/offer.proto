@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package offer;
+
+message OfferRequest {
+    int32 sn = 1;
+    int32 price = 2;
+}
+
+message OfferResponse {
+    bool confirmed = 1;
+}
+
+service Offer {
+    rpc ConfirmOffer (OfferRequest) returns (OfferResponse);
+}
