@@ -134,23 +134,22 @@ impl Offer for OfferImpl {
     }
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let addr: SocketAddr = "[::1]:8080".parse().unwrap();
+    let addr: SocketAddr = "[::1]:8080".parse().unwrap();
 
-  // Create an instance of ProductImpl
-  let product_impl = ProductImpl::new();
-  // Start updating the product data in a separate thread
-  product_impl.start_updating();
+    // Create an instance of ProductImpl
+    let product_impl = ProductImpl::new(); // Changed to not mutable
 
 // Create an instance of ProductImpl
 let offer_impl = OfferImpl::new();
 offer_impl.set_product(&product_impl);
 
+    // Start updating the product data in a separate thread
+    product_impl.start_updating();
 
 
-  println!("Rust gRPC server listening on {}", addr);
+    println!("Rust gRPC server listening on {}", addr);
 
   // Serve the GPRC server
   Server::builder()
@@ -158,7 +157,7 @@ offer_impl.set_product(&product_impl);
       .serve(addr)
       .await?;
 
-  Ok(())
+    Ok(())
 }
 
 // https://www.thorsten-hans.com/grpc-services-in-rust-with-tonic/
