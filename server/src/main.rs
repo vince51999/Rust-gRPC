@@ -76,7 +76,7 @@ impl ProductImpl {
 impl Product for ProductImpl {
     async fn get_price(
         &self,
-        request: Request<Empty>,
+        _request: Request<Empty>,
     ) -> Result<Response<ProductPriceResponse>, Status> {
         // Return the price from the product data
         let data = Arc::clone(&self.data);
@@ -88,7 +88,7 @@ impl Product for ProductImpl {
 
     async fn get_sn(
         &self,
-        request: Request<Empty>,
+        _request: Request<Empty>,
     ) -> Result<Response<ProductSnResponse>, Status> {
         // Return the serial number from the product data
         let data = Arc::clone(&self.data);
