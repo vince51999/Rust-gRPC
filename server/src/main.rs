@@ -1,8 +1,19 @@
-use std::{
-    sync::{Arc, Mutex},
-    net::SocketAddr,
-};
-use tonic::{transport::Server, Request, Response, Status};
+/**
+ * This is the main file for the Rust gRPC server.
+ */
+
+/**
+ * Import the Arc and Mutex types for thread-safe reference counting
+ * - Arc: is an atomic reference-counted pointer
+ * - Mutex: is a mutual exclusion primitive
+ * - net: module for networking
+ */
+use std::{ sync::{Arc, Mutex}, net::SocketAddr };
+/**
+ * Import the Server type to create a gRPC server
+ * Import the Request, Response, and Status types for handling requests and responses
+ */
+use tonic::{ transport::Server, Request, Response, Status};
 use rand::Rng;
 use lazy_static::lazy_static;
 
@@ -21,34 +32,42 @@ struct ProductData {
     sn: i32,
 }
 
-// Define a global variable for product data
+/*
+ Define a global variable for product data
+ - lazy_static: is used to create a global variable that is initialized lazily when it is accessed for the first time
+ */
 lazy_static! {
     static ref PRODUCT: Arc<Mutex<ProductData>> = Arc::new(Mutex::new(ProductData::default()));
 }
 
-// Define a struct to represent the product
+// Define a struct to implement the Product service
 pub struct ProductImpl;
 
 impl ProductImpl {
-    // Constructor to create a new instance
     pub fn new() -> Self {
         Self {}
     }
 
     // Method to update the global product data asynchronously
     pub fn start_updating(&self) {
-        // Spawn a background task to update the product data
+        /* 
+         Spawn a background task to update the product data
+         The task will run in a separate thread and update the product data every T seconds
+         - async move: is used to capture the variables from the surrounding scope
+         */
         tokio::spawn(async move {
             loop {
                 let price;
                 let sn;
 
                 {
-                    // Lock the global product data
+                    /*
+                    Lock the product data for writing, and update the price and serial number
+                    - .lock(): Locks the mutex and returns a guard that releases the lock when dropped
+                    - .unwrap(): Unwraps the Result to get the value inside the Ok variant
+                     */
                     let mut product_data = PRODUCT.lock().unwrap();
-                    // Generate a random integer price between 10 and 200
                     price = rand::thread_rng().gen_range(10..=200);
-                    // Generate a random integer serial number between 0 and 300
                     sn = rand::thread_rng().gen_range(0..=300);
 
                     // Update the product data
@@ -56,8 +75,6 @@ impl ProductImpl {
                     product_data.sn = sn;
                     println!("{}, {}", sn, price);
                 }
-
-                // Sleep for some time before the next update
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         });
