@@ -57,9 +57,8 @@ impl ProductImpl {
          */
         tokio::spawn(async move {
             loop {
-                let price;
-                let sn;
-
+                let price = rand::thread_rng().gen_range(10..=200);
+                let sn = rand::thread_rng().gen_range(0..=50);
                 {
                     /*
                     Lock the product data for writing, and update the price and serial number
@@ -67,14 +66,12 @@ impl ProductImpl {
                     - .unwrap(): Unwraps the Result to get the value inside the Ok variant
                      */
                     let mut product_data = PRODUCT.lock().unwrap();
-                    price = rand::thread_rng().gen_range(10..=200);
-                    sn = rand::thread_rng().gen_range(0..=300);
 
                     // Update the product data
                     product_data.price = price;
                     product_data.sn = sn;
-                    println!("{}, {}", sn, price);
                 }
+                println!("New sn: {} - price: {}$", sn, price);
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         });
