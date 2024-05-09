@@ -17,25 +17,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   .connect()
   .await?;
 
-    // Create a gRPC client
-    let mut clientProduct = ProductClient::new(channel.clone());
-    let mut clientOffer = OfferClient::new(channel.clone());
-    loop {
-      // Make gRPC calls
-      let price = (clientProduct.get_price(Empty {}).await?).into_inner().price; // Call GetPrice with an Empty request
-      let sn = (clientProduct.get_sn(Empty {}).await?).into_inner().sn; // Call GetSN with an Empty request
-      println!("Recived product with sn: {:?} and price: {:?}", sn, price);
-      
-      let new_price = rand::thread_rng().gen_range(10..=200);
-      let offer_request = OfferRequest {
-        price: ( new_price ) as i32,
-        sn: sn,
-      };
-      let confirmed = (clientOffer.confirm_offer(offer_request).await?).into_inner().confirmed; // Call ConfirmOffer with an OfferRequest
-      println!("Server response: {:?} for offer: {:?}\n", confirmed, new_price);
-      tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    }
-    Ok(())
-}
+  // Create a gRPC client services
+  let mut client_product = ProductClient::new(channel.clone());
+  let mut client_offer = OfferClient::new(channel.clone());
 
-// https://www.thorsten-hans.com/grpc-services-in-rust-with-tonic/
+  let purchases = 10;
+  let mut count = 0;
+
+  while count < purchases {
+    let price = (client_product.get_price(Empty {}).await?).into_inner().price;
+    let sn = (client_product.get_sn(Empty {}).await?).into_inner().sn;
+    println!("Recived product with sn: {:?} and price: {:?}", sn, price);
+    
+    let new_price = rand::thread_rng().gen_range(10..=200);
+    let offer_request = OfferRequest {
+      price: ( new_price ) as i32,
+      sn: sn,
+    };
+    let confirmed = (client_offer.confirm_offer(offer_request).await?).into_inner().confirmed;
+    println!("Server response: {:?} for offer: {:?}\n", confirmed, new_price);
+    if confirmed {
+      count += 1;
+      println!("Purchases: {:?} / {:?}\n", count, purchases);
+    }
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+  }
+  
+  Ok(())
+}
