@@ -1,11 +1,11 @@
 use tonic::transport::Channel;
 use rand::Rng;
-use product::{product_client::ProductClient, Empty};
-use offer::{offer_client::OfferClient, OfferRequest};
 
+use product::{product_client::ProductClient, Empty};
 pub mod product {
     tonic::include_proto!("product");
 }
+use offer::{offer_client::OfferClient, OfferRequest};
 pub mod offer {
   tonic::include_proto!("offer");
 }
