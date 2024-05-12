@@ -17,10 +17,11 @@ use tonic::{ transport::Server, Request, Response, Status};
 use rand::Rng;
 use lazy_static::lazy_static;
 
+extern crate chrono;
+use chrono::Local;
+
 // Import the generated product module
-use product::{
-    Empty, ProductSnResponse, ProductPriceResponse, product_server::{Product, ProductServer}
-};
+use product::{ Empty, ProductSnRequest, ProductsSnResponse, ProductPriceResponse, product_server::{Product, ProductServer} };
 pub mod product {
     tonic::include_proto!("product");
 }
@@ -37,7 +38,7 @@ struct ProductData {
  - lazy_static: is used to create a global variable that is initialized lazily when it is accessed for the first time
  */
 lazy_static! {
-    static ref PRODUCT: Arc<Mutex<ProductData>> = Arc::new(Mutex::new(ProductData::default()));
+    static ref PRODUCTS: Arc<Mutex<Vec<ProductData>>> = Arc::new(Mutex::new(Vec::new()));
 }
 
 // Define a struct to implement the Product service
@@ -57,21 +58,24 @@ impl ProductImpl {
          */
         tokio::spawn(async move {
             loop {
-                let price = rand::thread_rng().gen_range(10..=200);
-                let sn = rand::thread_rng().gen_range(0..=50);
+                let date = Local::now();
+                println!("Update prices: {}", date.format("%Y-%m-%d][%H:%M:%S"));
                 {
                     /*
-                    Lock the product data for writing, and update the price and serial number
+                    Lock the products for writing, and update the price and serial number of each product
                     - .lock(): Locks the mutex and returns a guard that releases the lock when dropped
                     - .unwrap(): Unwraps the Result to get the value inside the Ok variant
                      */
-                    let mut product_data = PRODUCT.lock().unwrap();
-
-                    // Update the product data
-                    product_data.price = price;
-                    product_data.sn = sn;
+                    let mut products = PRODUCTS.lock().unwrap();
+                    for i in 0..products.len(){
+                        // Update the product data
+                        let price = rand::thread_rng().gen_range(10..=200);
+                        let sn = i as i32;
+                        products[i] = ProductData { price, sn };
+                        println!("Product sn: {} - price: {}$", sn, price);
+                    }
                 }
-                println!("New sn: {} - price: {}$", sn, price);
+                println!("\n");
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         });
@@ -82,21 +86,32 @@ impl ProductImpl {
 impl Product for ProductImpl {
     async fn get_price(
         &self,
-        _request: Request<Empty>,
+        _request: Request<ProductSnRequest>,
     ) -> Result<Response<ProductPriceResponse>, Status> {
-        // Return the price from the global product data
-        let product_data = PRODUCT.lock().unwrap();
-        let response = ProductPriceResponse { price: product_data.price };
+        let sn = _request.get_ref().sn;
+        let mut prod_price = 0;
+        {
+            let products = PRODUCTS.lock().unwrap();
+            if sn < 0 || sn >= products.len() as i32 {
+                return Err(Status::invalid_argument("Invalid serial number"));
+            }
+            prod_price = products[sn as usize].price;
+        }
+        let response = ProductPriceResponse { price: prod_price };
         Ok(Response::new(response))
     }
-
-    async fn get_sn(
+    async fn get_products_sn(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<ProductSnResponse>, Status> {
-        // Return the serial number from the global product data
-        let product_data = PRODUCT.lock().unwrap();
-        let response = ProductSnResponse { sn: product_data.sn };
+    ) -> Result<Response<ProductsSnResponse>, Status> {
+        let mut sn_list = Vec::new();
+        {
+            let products = PRODUCTS.lock().unwrap();
+            for product in products.iter() {
+                sn_list.push(product.sn);
+            }
+        }
+        let response = ProductsSnResponse { sn_list: sn_list };
         Ok(Response::new(response))
     }
 }
@@ -123,19 +138,18 @@ impl Offer for OfferImpl {
         &self,
         _request: Request<OfferRequest>,
     ) -> Result<Response<OfferResponse>, Status> {
-        // Access product data
-        let product_data = PRODUCT.lock().unwrap();
-
-        // Get the price and serial number from the product data
-        let prod_price = product_data.price;
-        let prod_sn = product_data.sn;
-
         // Get the price and serial number from the request
         let offer_price = _request.get_ref().price;
         let offer_sn = _request.get_ref().sn;
-
-        if offer_sn != prod_sn {
-            return Err(Status::invalid_argument("Invalid serial number"));
+        let mut prod_price = 0;
+        {
+            // Lock the products for reading
+            let products = PRODUCTS.lock().unwrap();
+            // Get the price and serial number from the product data
+            if offer_sn < 0 || offer_sn >= products.len() as i32 {
+                return Err(Status::invalid_argument("Invalid serial number"));
+            }
+            prod_price = products[offer_sn as usize].price;
         }
 
         let mut confirm = false;
@@ -155,6 +169,18 @@ impl Offer for OfferImpl {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = "[::1]:8080".parse().unwrap();
+
+    let date = Local::now();
+    println!("Server started at: {}", date.format("%Y-%m-%d][%H:%M:%S"));
+
+    // Initialize the products
+    for i in 0..5 {
+        let product_data = ProductData {
+            price: rand::thread_rng().gen_range(10..=200),
+            sn: i,
+        };
+        PRODUCTS.lock().unwrap().push(product_data);
+    }
 
     // Create an instance of ProductImpl
     let product_impl = ProductImpl::new();

@@ -2,15 +2,20 @@ syntax = "proto3";
 
 package product;
 
-message Empty {}
-message ProductSnResponse {
+message ProductSnRequest {
     int32 sn = 1;
 }
 message ProductPriceResponse {
     int32 price = 1;
 }
 
+message Empty {
+}
+message ProductsSnResponse {
+    repeated int32 sn_list = 1;
+}
+
 service Product {
-    rpc GetPrice (Empty) returns (ProductPriceResponse);
-    rpc GetSN (Empty) returns (ProductSnResponse);
+    rpc GetPrice (ProductSnRequest) returns (ProductPriceResponse);
+    rpc GetProductsSn (Empty) returns (ProductsSnResponse);
 }

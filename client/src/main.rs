@@ -1,7 +1,7 @@
 use tonic::transport::Channel;
 use rand::Rng;
 
-use product::{product_client::ProductClient, Empty};
+use product::{product_client::ProductClient, Empty, ProductSnRequest};
 pub mod product {
     tonic::include_proto!("product");
 }
@@ -25,9 +25,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut count = 0;
 
   while count < purchases {
-    let price = (client_product.get_price(Empty {}).await?).into_inner().price;
-    let sn = (client_product.get_sn(Empty {}).await?).into_inner().sn;
-    println!("Recived product with sn: {:?} and price: {:?}", sn, price);
+    let sn_list = (client_product.get_products_sn(Empty {}).await?).into_inner().sn_list;
+    
+    let sn = sn_list[rand::thread_rng().gen_range(0..sn_list.len())];
+    let price = (client_product.get_price(ProductSnRequest { sn: sn }).await?).into_inner().price;
+
+    println!("The price for product with sn: {:?} is: {:?}$", sn, price);
     
     let new_price = rand::thread_rng().gen_range(10..=200);
     let offer_request = OfferRequest {
@@ -35,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
       sn: sn,
     };
     let confirmed = (client_offer.confirm_offer(offer_request).await?).into_inner().confirmed;
-    println!("Server response: {:?} for offer: {:?}\n", confirmed, new_price);
+    println!("Server response: {:?} for offer: {:?}$\n", confirmed, new_price);
     if confirmed {
       count += 1;
       println!("Purchases: {:?} / {:?}\n", count, purchases);

@@ -11,6 +11,7 @@ tokio = { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
 tonic = "0.11.0"
 rand = "0.8"
 lazy_static = "1.4"
+chrono = "0.4"
 
 [build-dependencies]
 tonic-build = "0.11.0"
