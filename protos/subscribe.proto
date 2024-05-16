@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package subscribe;
+
+message SubscribeRequest {}
+
+message SubscribeResponse {
+    bool success = 1;
+}
+service Subscribe {
+    rpc Subscribe (SubscribeRequest) returns (SubscribeResponse);
+}
