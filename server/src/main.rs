@@ -39,6 +39,7 @@ struct ProductData {
  */
 lazy_static! {
     static ref PRODUCTS: Arc<Mutex<Vec<ProductData>>> = Arc::new(Mutex::new(Vec::new()));
+    static ref SUBSCRIPTION_COUNT: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
 // Define a struct to implement the Product service
@@ -48,46 +49,27 @@ impl ProductImpl {
     pub fn new() -> Self {
         Self {}
     }
-
-    // Method to update the global product data asynchronously
-    pub fn start_updating(&self) {
-        /* 
-         Spawn a background task to update the product data
-         The task will run in a separate thread and update the product data every T seconds
-         - async move: is used to capture the variables from the surrounding scope
-         */
-        tokio::spawn(async move {
-            loop {
-                let date = Local::now();
-                println!("Update prices: {}", date.format("%Y-%m-%d][%H:%M:%S"));
-                {
-                    /*
-                    Lock the products for writing, and update the price and serial number of each product
-                    - .lock(): Locks the mutex and returns a guard that releases the lock when dropped
-                    - .unwrap(): Unwraps the Result to get the value inside the Ok variant
-                     */
-                    let mut products = PRODUCTS.lock().unwrap();
-                    for i in 0..products.len(){
-                        // Update the product data
-                        let price = rand::thread_rng().gen_range(10..=200);
-                        let sn = i as i32;
-                        products[i] = ProductData { price, sn };
-                        println!("Product sn: {} - price: {}$", sn, price);
-                    }
-                }
-                println!("\n");
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            }
-        });
-    }
 }
-
+/**
+ * Implement the remote service trait for the Product service
+ */
 #[tonic::async_trait]
 impl Product for ProductImpl {
     async fn get_price(
         &self,
         _request: Request<ProductSnRequest>,
     ) -> Result<Response<ProductPriceResponse>, Status> {
+        loop {
+            let count = {
+                let count_lock = SUBSCRIPTION_COUNT.lock().unwrap();
+                *count_lock
+            };
+            if count < 3 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            } else {
+                break;
+            }
+        }
         let sn = _request.get_ref().sn;
         let mut prod_price = 0;
         {
@@ -104,6 +86,17 @@ impl Product for ProductImpl {
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<ProductsSnResponse>, Status> {
+        loop {
+            let count = {
+                let count_lock = SUBSCRIPTION_COUNT.lock().unwrap();
+                *count_lock
+            };
+            if count < 3 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            } else {
+                break;
+            }
+        }
         let mut sn_list = Vec::new();
         {
             let products = PRODUCTS.lock().unwrap();
@@ -166,6 +159,45 @@ impl Offer for OfferImpl {
     }
 }
 
+use subscribe::{
+    SubscribeRequest, SubscribeResponse, subscribe_server::{Subscribe, SubscribeServer}
+};
+pub mod subscribe {
+    tonic::include_proto!("subscribe");
+}
+
+pub struct SubscribeImpl {}
+
+impl SubscribeImpl {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[tonic::async_trait]
+impl Subscribe for SubscribeImpl {
+    async fn subscribe(
+        &self,
+        _request: Request<SubscribeRequest>,
+    ) -> Result<Response<SubscribeResponse>, Status> {
+        let count;
+        {
+            let mut count_lock = SUBSCRIPTION_COUNT.lock().unwrap();
+            *count_lock += 1;
+            println!("Client subscribed. Total subscriptions: {}", *count_lock);
+            count = *count_lock;
+        }
+
+        if count == 3 {
+            println!("Starting price updates as 3 clients have subscribed.");
+        }
+
+        let response = SubscribeResponse { success: true };
+        Ok(Response::new(response))
+    }
+}
+
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = "[::1]:8080".parse().unwrap();
@@ -182,20 +214,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         PRODUCTS.lock().unwrap().push(product_data);
     }
 
-    // Create an instance of ProductImpl
-    let product_impl = ProductImpl::new();
-
-    // Start updating the product data in a separate thread
-    product_impl.start_updating();
+    //Create thread for services
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(SubscribeServer::new(SubscribeImpl::new()))
+            .add_service(ProductServer::new(ProductImpl::new()))
+            .add_service(OfferServer::new(OfferImpl::new()))
+            .serve(addr)
+            .await
+            .unwrap();
+    });
 
     println!("Rust gRPC server listening on {}", addr);
 
-    // Serve the gRPC server
-    Server::builder()
-        .add_service(ProductServer::new(product_impl))
-        .add_service(OfferServer::new(OfferImpl::new()))
-        .serve(addr)
-        .await?;
+    loop {
+        let count = {
+            let count_lock = SUBSCRIPTION_COUNT.lock().unwrap();
+            *count_lock
+        };
+        if count < 3 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        } else {
+            break;
+        }
+    }
+
+    loop {
+        let date = Local::now();
+        println!("Update prices: {}", date.format("%Y-%m-%d][%H:%M:%S"));
+        {
+            /*
+            Lock the products for writing, and update the price and serial number of each product
+            - .lock(): Locks the mutex and returns a guard that releases the lock when dropped
+            - .unwrap(): Unwraps the Result to get the value inside the Ok variant
+             */
+            let mut products = PRODUCTS.lock().unwrap();
+            for i in 0..products.len(){
+                // Update the product data
+                let price = rand::thread_rng().gen_range(10..=200);
+                let sn = i as i32;
+                products[i] = ProductData { price, sn };
+                println!("Product sn: {} - price: {}$", sn, price);
+            }
+        }
+        println!("\n");
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
 
     Ok(())
 }
