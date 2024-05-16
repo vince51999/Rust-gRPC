@@ -9,6 +9,10 @@ use offer::{offer_client::OfferClient, OfferRequest};
 pub mod offer {
   tonic::include_proto!("offer");
 }
+use subscribe::{subscribe_client::SubscribeClient, SubscribeRequest, SubscribeResponse};
+pub mod subscribe {
+    tonic::include_proto!("subscribe");
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,6 +24,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   // Create a gRPC client services
   let mut client_product = ProductClient::new(channel.clone());
   let mut client_offer = OfferClient::new(channel.clone());
+  let mut client_subscribe = SubscribeClient::new(channel.clone());
+
+  let subscribe_response = client_subscribe.subscribe(SubscribeRequest {}).await?;
+    if !subscribe_response.into_inner().success {
+        println!("Subscription failed");
+        return Ok(());
+    }
+    println!("Subscribed successfully");
 
   let purchases = 10;
   let mut count = 0;
