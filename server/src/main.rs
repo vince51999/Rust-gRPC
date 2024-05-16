@@ -40,6 +40,7 @@ struct ProductData {
 lazy_static! {
     static ref PRODUCTS: Arc<Mutex<Vec<ProductData>>> = Arc::new(Mutex::new(Vec::new()));
     static ref SUBSCRIPTION_COUNT: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+    static ref OPEN_SHOP: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
 }
 
 // Define a struct to implement the Product service
@@ -60,11 +61,11 @@ impl Product for ProductImpl {
         _request: Request<ProductSnRequest>,
     ) -> Result<Response<ProductPriceResponse>, Status> {
         loop {
-            let count = {
-                let count_lock = SUBSCRIPTION_COUNT.lock().unwrap();
-                *count_lock
+            let resp = {
+                let open_shop = OPEN_SHOP.lock().unwrap();
+                *open_shop
             };
-            if count < 3 {
+            if !resp {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             } else {
                 break;
@@ -87,11 +88,11 @@ impl Product for ProductImpl {
         _request: Request<Empty>,
     ) -> Result<Response<ProductsSnResponse>, Status> {
         loop {
-            let count = {
-                let count_lock = SUBSCRIPTION_COUNT.lock().unwrap();
-                *count_lock
+            let resp = {
+                let open_shop = OPEN_SHOP.lock().unwrap();
+                *open_shop
             };
-            if count < 3 {
+            if !resp {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             } else {
                 break;
@@ -160,7 +161,7 @@ impl Offer for OfferImpl {
 }
 
 use subscribe::{
-    SubscribeRequest, SubscribeResponse, subscribe_server::{Subscribe, SubscribeServer}
+    SubscribeRequest, SubscribeResponse, UnsubscribeRequest, UnsubscribeResponse, subscribe_server::{Subscribe, SubscribeServer}
 };
 pub mod subscribe {
     tonic::include_proto!("subscribe");
@@ -193,6 +194,26 @@ impl Subscribe for SubscribeImpl {
         }
 
         let response = SubscribeResponse { success: true };
+        Ok(Response::new(response))
+    }
+    async fn unsubscribe(
+        &self,
+        _request: Request<UnsubscribeRequest>,
+    ) -> Result<Response<UnsubscribeResponse>, Status> {
+        let count;
+        {
+            let mut count_lock = SUBSCRIPTION_COUNT.lock().unwrap();
+            *count_lock -= 1;
+            println!("Client unsubscribed. Total subscriptions: {}", *count_lock);
+            count = *count_lock;
+        }
+        if count == 0 {
+            let mut open_shop = OPEN_SHOP.lock().unwrap();
+            *open_shop = false;
+            println!("Stopping price updates as all clients have unsubscribed.");
+        }
+
+        let response = UnsubscribeResponse { success: true };
         Ok(Response::new(response))
     }
 }
@@ -235,30 +256,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if count < 3 {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         } else {
+            let mut open_shop = OPEN_SHOP.lock().unwrap();
+            *open_shop = true;
             break;
         }
     }
 
     loop {
-        let date = Local::now();
-        println!("Update prices: {}", date.format("%Y-%m-%d][%H:%M:%S"));
-        {
-            /*
-            Lock the products for writing, and update the price and serial number of each product
-            - .lock(): Locks the mutex and returns a guard that releases the lock when dropped
-            - .unwrap(): Unwraps the Result to get the value inside the Ok variant
-             */
-            let mut products = PRODUCTS.lock().unwrap();
-            for i in 0..products.len(){
-                // Update the product data
-                let price = rand::thread_rng().gen_range(10..=200);
-                let sn = i as i32;
-                products[i] = ProductData { price, sn };
-                println!("Product sn: {} - price: {}$", sn, price);
+        let resp = {
+            let open_shop = OPEN_SHOP.lock().unwrap();
+            *open_shop
+        };
+        if !resp {
+            break;
+        } else {
+            let date = Local::now();
+            println!("Update prices: {}", date.format("%Y-%m-%d][%H:%M:%S"));
+            {
+                /*
+                Lock the products for writing, and update the price and serial number of each product
+                - .lock(): Locks the mutex and returns a guard that releases the lock when dropped
+                - .unwrap(): Unwraps the Result to get the value inside the Ok variant
+                */
+                let mut products = PRODUCTS.lock().unwrap();
+                for i in 0..products.len(){
+                    // Update the product data
+                    let price = rand::thread_rng().gen_range(10..=200);
+                    let sn = i as i32;
+                    products[i] = ProductData { price, sn };
+                    println!("Product sn: {} - price: {}$", sn, price);
+                }
             }
+            println!("\n");
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
-        println!("\n");
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
 
     Ok(())

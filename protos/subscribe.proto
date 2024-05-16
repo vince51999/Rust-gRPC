@@ -7,6 +7,13 @@ message SubscribeRequest {}
 message SubscribeResponse {
     bool success = 1;
 }
+
+message UnsubscribeRequest {}
+message UnsubscribeResponse {
+    bool success = 1;
+}
+
 service Subscribe {
     rpc Subscribe (SubscribeRequest) returns (SubscribeResponse);
+    rpc Unsubscribe (UnsubscribeRequest) returns (UnsubscribeResponse);
 }

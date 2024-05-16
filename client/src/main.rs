@@ -9,7 +9,7 @@ use offer::{offer_client::OfferClient, OfferRequest};
 pub mod offer {
   tonic::include_proto!("offer");
 }
-use subscribe::{subscribe_client::SubscribeClient, SubscribeRequest, SubscribeResponse};
+use subscribe::{subscribe_client::SubscribeClient, SubscribeRequest, UnsubscribeRequest};
 pub mod subscribe {
     tonic::include_proto!("subscribe");
 }
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   while count < purchases {
     let sn_list = (client_product.get_products_sn(Empty {}).await?).into_inner().sn_list;
-    
+
     let sn = sn_list[rand::thread_rng().gen_range(0..sn_list.len())];
     let price = (client_product.get_price(ProductSnRequest { sn: sn }).await?).into_inner().price;
 
@@ -57,6 +57,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
   }
+
+  let subscribe_response = client_subscribe.unsubscribe(UnsubscribeRequest {}).await?;
+  if !subscribe_response.into_inner().success {
+    println!("Unsubscription failed");
+    return Ok(());
+  }
+  
   
   Ok(())
 }
